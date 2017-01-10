@@ -46,6 +46,7 @@ static void usage(const char* pname)
             "   -h: this message\n"
             "   -p: save the file as a png.\n"
             "   -d: specify the display id to capture, default %d.\n"
+            "   -s: specify the scale to decreasing.\n"
             "If FILENAME ends with .png it will be saved as a png.\n"
             "If FILENAME is not given, the results will be printed to stdout.\n",
             pname, DEFAULT_DISPLAY_ID
@@ -94,13 +95,17 @@ int main(int argc, char** argv)
     bool png = false;
     int32_t displayId = DEFAULT_DISPLAY_ID;
     int c;
-    while ((c = getopt(argc, argv, "phd:")) != -1) {
+    int step = 1;
+    while ((c = getopt(argc, argv, "s:phd:")) != -1) {
         switch (c) {
             case 'p':
                 png = true;
                 break;
             case 'd':
                 displayId = atoi(optarg);
+                break;
+            case 's':
+                step = atoi(optarg);
                 break;
             case '?':
             case 'h':
@@ -174,10 +179,35 @@ int main(int argc, char** argv)
 
     if (base) {
         if (png) {
-            const SkImageInfo info = SkImageInfo::Make(w, h, flinger2skia(f),
+	    int bpp = bytesPerPixel(f);
+	    char *newimg = (char*)malloc(s * h * bpp);
+	    char *ptr = newimg;
+	    char *base_ptr = (char*)base;
+	    int new_w=0;
+	    int new_h=0;
+	    unsigned int i, j;
+	    
+	    
+	    new_w = w / step;
+	    if(w % step) new_w++;
+	    new_h = h / step;	    
+	    if(h % step) new_h++;
+	    
+	    for (i = 0; i < h; i+= step) {
+	        char *row = (char*)base_ptr;
+		
+		for (j = 0; j < w; j += step) {
+			memcpy(ptr, row, bpp);
+			ptr += bpp;
+			row += bpp * step;
+		}
+		ptr += (s - new_w) * bpp;
+		base_ptr += s * bpp * step;
+	    }
+            const SkImageInfo info = SkImageInfo::Make(new_w, new_h, flinger2skia(f),
                                                        kPremul_SkAlphaType);
             SkBitmap b;
-            b.installPixels(info, const_cast<void*>(base), s*bytesPerPixel(f));
+            b.installPixels(info, const_cast<void*>((void*)newimg), s * bpp);
             SkDynamicMemoryWStream stream;
             SkImageEncoder::EncodeStream(&stream, b,
                     SkImageEncoder::kPNG_Type, SkImageEncoder::kDefaultQuality);
